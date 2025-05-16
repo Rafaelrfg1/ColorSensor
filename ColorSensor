@@ -1,0 +1,60 @@
+from machine import Pin, I2C
+from color_sensor import ColorSensor
+import time
+
+# Initialize I2C and sensor
+i2c = I2C(1, sda=Pin(2), scl=Pin(3), freq=100000)
+sensor = ColorSensor(i2c)
+
+# Get and print a single color reading
+color, (r, g, b, c) = sensor.get_color()
+print(f"Detected color: {color}")
+print(f"Raw values - R: {r}, G: {g}, B: {b}, C: {c}")
+# Initialize sensor as before
+
+def isNearTheLine(color):
+    if color == "White":
+        return True
+    else:
+        return None
+redCounter = 0
+greenCounter = 0
+blueCounter = 0
+    
+def colorIs(color, redCounter, greenCounter, blueCounter):
+    if color == "Red":
+        redCounter = 1
+        return "Red"
+    elif color == "Green":
+        greenCounter = 1
+        return "Green"
+    elif color == "Blue":
+        blueCounter = 1
+        return "Blue"
+    elif color == "Black":
+        return "Black"
+    elif color == "White":
+        return "White"
+    
+def instructionSensor (color):
+    if color == "White":
+        return 'Turn Right 2 clicks and Go Forward for 4 ticks'
+    elif color == "Black":
+        return 'Go Forward Continuously'
+    else:
+        return 'Stop'
+
+
+while True:
+    # Get both color and normalized values
+    color, (r, g, b, c) = sensor.get_color()
+    r_ratio, g_ratio, b_ratio, _ = sensor.get_normalized_values()
+    
+    # Print results
+    print("Color is " + str(colorIs(color,redCounter, greenCounter, blueCounter)))
+    print(f"Raw - R: {r}, G: {g}, B: {b}, C: {c}")
+    #print(f"Normalized - R: {r_ratio:.1f}, G: {g_ratio:.1f}, B: {b_ratio:.1f}")
+    #print("-" * 50)
+    print("\nIs on the line?   " + str(isNearTheLine(color)))
+    print("\nWhat do I do? " + str(instructionSensor(color)))
+    time.sleep(1)
