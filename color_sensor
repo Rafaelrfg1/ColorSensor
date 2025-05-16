@@ -1,0 +1,119 @@
+from machine import Pin, I2C
+import time
+
+class ColorSensor:
+    """Class for interfacing with TCS34725 RGB color sensor"""
+    
+    # TCS34725 Constants
+    _ADDR = 0x29
+    _COMMAND_BIT = 0x80
+    _ENABLE = 0x00
+    _ATIME = 0x01
+    _CONTROL = 0x0F
+    _RDATAL = 0x16
+    _GDATAL = 0x18
+    _BDATAL = 0x1A
+    _CDATAL = 0x14
+    
+    def __init__(self, i2c):
+        """Initialize the color sensor with the provided I2C bus"""
+        self.i2c = i2c
+        self._init_sensor()
+    
+    def _init_sensor(self):
+        """Initialize the sensor with appropriate settings"""
+        # Power on
+        self.i2c.writeto_mem(self._ADDR, self._COMMAND_BIT | self._ENABLE, bytes([0x01]))
+        time.sleep(0.003)
+        # Enable RGB and Wait time
+        self.i2c.writeto_mem(self._ADDR, self._COMMAND_BIT | self._ENABLE, bytes([0x03]))
+        # Set integration time (154ms)
+        self.i2c.writeto_mem(self._ADDR, self._COMMAND_BIT | self._ATIME, bytes([0xEB]))
+        # Set gain (4x)
+        self.i2c.writeto_mem(self._ADDR, self._COMMAND_BIT | self._CONTROL, bytes([0x01]))
+        time.sleep(0.05)
+    
+    def get_raw_data(self):
+        """
+        Read raw color values from the sensor.
+        Returns:
+            tuple: (red, green, blue, clear) raw values
+        """
+        r = self.i2c.readfrom_mem(self._ADDR, self._COMMAND_BIT | self._RDATAL, 2)
+        g = self.i2c.readfrom_mem(self._ADDR, self._COMMAND_BIT | self._GDATAL, 2)
+        b = self.i2c.readfrom_mem(self._ADDR, self._COMMAND_BIT | self._BDATAL, 2)
+        c = self.i2c.readfrom_mem(self._ADDR, self._COMMAND_BIT | self._CDATAL, 2)
+        
+        # Convert bytes to integers
+        r_val = r[0] + (r[1] << 8)
+        g_val = g[0] + (g[1] << 8)
+        b_val = b[0] + (b[1] << 8)
+        c_val = c[0] + (c[1] << 8)
+        
+        return r_val, g_val, b_val, c_val
+    
+    def get_color(self):
+        """
+        Read and identify the current color.
+        Returns:
+            tuple: (color_name, raw_values)
+            where color_name is a string indicating the detected color
+            and raw_values is a tuple of (red, green, blue, clear) values
+        """
+        r, g, b, c = self.get_raw_data()
+        
+        # Prevent division by zero
+        if c == 0:
+            return "No color detected", (r, g, b, c)
+        
+        # Normalize RGB values
+        r_ratio = r / c * 255
+        g_ratio = g / c * 255
+        b_ratio = b / c * 255
+        
+        # Get maximum and minimum ratios for color detection
+        max_ratio = max(r_ratio, g_ratio, b_ratio)
+        min_ratio = min(r_ratio, g_ratio, b_ratio)
+        
+        # Check for black and white first (based on clear value and ratio spread)
+        ratio_spread = max_ratio - min_ratio
+        
+        if c < 1000:  # Low overall reflection     #Part of the original that I commented out
+            color = "Black"
+        
+        elif c > 4000 and ratio_spread < 60:  # High reflection and similar RGB values
+            color = "White"
+        # Then check for specific colors
+        elif r_ratio > max(g_ratio, b_ratio):
+            if g_ratio > b_ratio * 1.5:  # High red and medium green = orange
+                color = "Orange"
+            else:
+                color = "Red"
+        elif g_ratio > max(r_ratio, b_ratio) * 1.2:
+            color = "Green"
+        elif b_ratio > max(r_ratio, g_ratio) * 1.2:
+            color = "Blue"
+        elif abs(r_ratio - b_ratio) < 30 and min(r_ratio, b_ratio) > g_ratio * 1.2:
+            color = "Purple"
+        elif abs(r_ratio - g_ratio) < 30 and max(r_ratio, g_ratio) > b_ratio * 1.5:
+            color = "Yellow"
+        else:
+            color = "Unknown"
+            
+        return color, (r, g, b, c)
+    
+    def get_normalized_values(self):
+        """
+        Get the normalized color values (0-255 scale).
+        Returns:
+            tuple: (r_ratio, g_ratio, b_ratio, clear)
+        """
+        r, g, b, c = self.get_raw_data()
+        if c == 0:
+            return 0, 0, 0, 0
+            
+        r_ratio = r / c * 255
+        g_ratio = g / c * 255
+        b_ratio = b / c * 255
+        
+        return r_ratio, g_ratio, b_ratio, c
